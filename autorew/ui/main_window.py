@@ -21,6 +21,7 @@ from autorew.demo_client import DemoClient
 from autorew.models import ProjectConfig, WorkflowStep, Zone, ZoneType
 from autorew.rew_client import REWClient
 from autorew.ui.styles import COLORS as C, global_stylesheet, btn_primary, btn_ghost
+from autorew.ui.widgets.setup_wizard import SetupWizardWidget
 from autorew.ui.widgets.connection import ConnectionWidget
 from autorew.ui.widgets.zone_setup import ZoneSetupWidget
 from autorew.ui.widgets.measurement import MeasurementWidget
@@ -29,8 +30,9 @@ from autorew.ui.widgets.export import ExportWidget
 
 
 STEPS = [
-    (WorkflowStep.CONNECTION, "Verbindung & Setup", "Verbinde REW und konfiguriere Audio"),
-    (WorkflowStep.ZONE_SETUP, "Zonen", "Definiere PA-Zonen und Kanaele"),
+    (WorkflowStep.SETUP, "System-Setup", "Tops, Subs und Messpositionen"),
+    (WorkflowStep.CONNECTION, "Verbindung & Audio", "Verbinde REW und konfiguriere Audio"),
+    (WorkflowStep.ZONE_SETUP, "Zonen", "Feinjustierung der PA-Zonen"),
     (WorkflowStep.MEASUREMENT, "Messungen", "Fuehre Sweep-Messungen durch"),
     (WorkflowStep.ANALYSIS, "Analyse & EQ", "Alignment, EQ und Visualisierung"),
     (WorkflowStep.EXPORT, "Export", "PEQ, FIR, Delay und PDF-Report"),
@@ -83,7 +85,6 @@ class StepButton(QWidget):
         circle_y = h // 2
         circle_r = 14
 
-        # Hover-Hintergrund
         if self.underMouse() or self._active:
             bg_color = QColor(C["bg_hover"]) if not self._active else QColor(C["accent_dark"])
             bg_color.setAlpha(60 if not self._active else 40)
@@ -91,17 +92,14 @@ class StepButton(QWidget):
             p.setBrush(QBrush(bg_color))
             p.drawRoundedRect(4, 2, w - 8, h - 4, 8, 8)
 
-        # Verbindungslinie nach unten (falls nicht letzter Step)
         if self._index < len(STEPS) - 1:
             p.setPen(QPen(QColor(C["border"]), 2))
             p.drawLine(circle_x, circle_y + circle_r + 2, circle_x, h)
 
-        # Verbindungslinie nach oben (falls nicht erster Step)
         if self._index > 0:
             p.setPen(QPen(QColor(C["border"]), 2))
             p.drawLine(circle_x, 0, circle_x, circle_y - circle_r - 2)
 
-        # Kreis
         if self._active:
             p.setPen(QPen(QColor(C["accent"]), 2))
             p.setBrush(QBrush(QColor(C["accent_dark"])))
@@ -114,7 +112,6 @@ class StepButton(QWidget):
 
         p.drawEllipse(circle_x - circle_r, circle_y - circle_r, circle_r * 2, circle_r * 2)
 
-        # Nummer oder Haken im Kreis
         if self._completed and not self._active:
             p.setPen(QPen(QColor("white"), 2))
             p.drawLine(circle_x - 5, circle_y, circle_x - 1, circle_y + 4)
@@ -127,7 +124,6 @@ class StepButton(QWidget):
                        circle_r * 2, circle_r * 2,
                        Qt.AlignmentFlag.AlignCenter, str(self._index + 1))
 
-        # Label
         text_x = circle_x + circle_r + 14
         label_color = QColor(C["text_primary"]) if self._active else QColor(C["text_secondary"])
         p.setPen(label_color)
@@ -135,7 +131,6 @@ class StepButton(QWidget):
         p.drawText(text_x, circle_y - 8, w - text_x - 8, 20,
                    Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, self._label)
 
-        # Subtitle
         if self._active:
             p.setPen(QColor(C["text_muted"]))
             p.setFont(QFont("Segoe UI", 9))
@@ -161,7 +156,6 @@ class StepIndicator(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # Logo / Titel
         title_widget = QWidget()
         title_layout = QVBoxLayout(title_widget)
         title_layout.setContentsMargins(20, 20, 16, 24)
@@ -179,7 +173,6 @@ class StepIndicator(QWidget):
 
         layout.addWidget(title_widget)
 
-        # Trennlinie
         line = QFrame()
         line.setFrameShape(QFrame.Shape.HLine)
         line.setStyleSheet(f"background: {C['border']}; max-height: 1px;")
@@ -195,7 +188,6 @@ class StepIndicator(QWidget):
 
         layout.addStretch()
 
-        # Version + Demo-Label
         self._demo_label = QLabel("")
         self._demo_label.setStyleSheet(f"""
             color: {C['warning']};
@@ -207,7 +199,7 @@ class StepIndicator(QWidget):
         self._demo_label.setVisible(False)
         layout.addWidget(self._demo_label)
 
-        version_label = QLabel("v0.1.0")
+        version_label = QLabel("v0.2.0")
         version_label.setStyleSheet(f"color: {C['text_muted']}; padding: 4px 20px 12px 20px; font-size: 11px;")
         layout.addWidget(version_label)
 
@@ -242,7 +234,6 @@ class MainWindow(QMainWindow):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        # Sidebar
         sidebar = QFrame()
         sidebar.setFixedWidth(260)
         sidebar.setStyleSheet(f"""
@@ -260,17 +251,16 @@ class MainWindow(QMainWindow):
 
         main_layout.addWidget(sidebar)
 
-        # Content area
         content = QFrame()
         content.setStyleSheet(f"QFrame {{ background: {C['bg_surface']}; }}")
         content_layout = QVBoxLayout(content)
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(0)
 
-        # Stacked widget fuer Steps
         self._stack = QStackedWidget()
         self._pages: list[QWidget] = []
 
+        self._setup_widget = SetupWizardWidget(self.config)
         self._connection_widget = ConnectionWidget(self.client, self.config)
         self._zone_widget = ZoneSetupWidget(self.client, self.config)
         self._measurement_widget = MeasurementWidget(self.client, self.config)
@@ -278,6 +268,7 @@ class MainWindow(QMainWindow):
         self._export_widget = ExportWidget(self.client, self.config)
 
         for widget in [
+            self._setup_widget,
             self._connection_widget,
             self._zone_widget,
             self._measurement_widget,
@@ -289,7 +280,6 @@ class MainWindow(QMainWindow):
 
         content_layout.addWidget(self._stack, 1)
 
-        # Navigation bar
         nav_bar = QFrame()
         nav_bar.setFixedHeight(64)
         nav_bar.setStyleSheet(f"""
@@ -324,7 +314,6 @@ class MainWindow(QMainWindow):
         content_layout.addWidget(nav_bar)
         main_layout.addWidget(content, 1)
 
-        # Global stylesheet
         self.setStyleSheet(global_stylesheet())
 
     def _goto_step(self, index: int):
@@ -348,6 +337,10 @@ class MainWindow(QMainWindow):
 
     def _go_next(self):
         current = self._stack.currentIndex()
+        if current == 0:
+            setup = self._setup_widget.get_setup()
+            self.config.setup = setup
+            self.config.zones = setup.generate_zones()
         if current < len(self._pages) - 1:
             self._goto_step(current + 1)
 
@@ -359,7 +352,6 @@ class MainWindow(QMainWindow):
         self.client.close()
         self.client = DemoClient()
 
-        # Demo-Zonen vorbelegen (positions muss zu measurement_ids passen)
         self.config.zones = [
             Zone(name="Main L", zone_type=ZoneType.MAIN_LEFT, output_channel=1,
                  positions=2, measurement_ids=[0, 1]),
@@ -370,11 +362,10 @@ class MainWindow(QMainWindow):
         ]
         self.config.is_pro_license = True
 
-        # Client in allen Widgets aktualisieren
         for page in self._pages:
-            page.client = self.client
+            if hasattr(page, "client"):
+                page.client = self.client
 
-        # Demo-Label in Sidebar anzeigen
         self._step_indicator._demo_label.setText("DEMO MODUS")
         self._step_indicator._demo_label.setVisible(True)
 
@@ -388,7 +379,8 @@ class MainWindow(QMainWindow):
         self.client = REWClient()
 
         for page in self._pages:
-            page.client = self.client
+            if hasattr(page, "client"):
+                page.client = self.client
 
         self._step_indicator._demo_label.setVisible(False)
         self.setWindowTitle("AutoREW - PA Einmessung")

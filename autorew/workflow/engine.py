@@ -1,4 +1,4 @@
-"""Workflow State Machine für AutoREW."""
+"""Workflow State Machine fuer AutoREW."""
 
 from __future__ import annotations
 
@@ -20,6 +20,7 @@ class WorkflowEngine:
     """Verwaltet den Fortschritt durch den Einmessungs-Workflow."""
 
     STEP_ORDER = [
+        WorkflowStep.SETUP,
         WorkflowStep.CONNECTION,
         WorkflowStep.ZONE_SETUP,
         WorkflowStep.MEASUREMENT,
@@ -41,7 +42,10 @@ class WorkflowEngine:
 
     @property
     def current_index(self) -> int:
-        return self.STEP_ORDER.index(self.config.current_step)
+        try:
+            return self.STEP_ORDER.index(self.config.current_step)
+        except ValueError:
+            return 0
 
     def get_status(self, step: WorkflowStep) -> StepStatus:
         return self._status.get(step, StepStatus.PENDING)
@@ -93,8 +97,10 @@ class WorkflowEngine:
             for s in self._status.values()
         )
 
+    def validate_setup(self) -> bool:
+        return True
+
     def validate_connection(self) -> bool:
-        """Prüft ob Connection-Step abgeschlossen werden kann."""
         return bool(self.config.audio.input_device and self.config.audio.output_device)
 
     def validate_zones(self) -> bool:

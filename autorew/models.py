@@ -1,4 +1,4 @@
-"""Datenmodelle für AutoREW."""
+"""Datenmodelle fuer AutoREW."""
 
 from __future__ import annotations
 
@@ -82,7 +82,6 @@ class AudioConfig(BaseModel):
 
 # --- Measurement Positions ---
 
-# Vordefinierte Messpositionen je nach Anzahl
 POSITION_PRESETS: dict[int, list[str]] = {
     1: [
         "FOH (Front of House) - Mischpultposition, zentral im Publikumsbereich",
@@ -130,7 +129,6 @@ SUB_POSITION_PRESETS: dict[int, list[str]] = {
 def get_position_description(position: int, total: int, is_sub: bool = False) -> str:
     """Gibt die Beschreibung fuer eine Messposition zurueck."""
     presets = SUB_POSITION_PRESETS if is_sub else POSITION_PRESETS
-    # Exaktes Preset oder naechstkleineres verwenden
     best_key = 1
     for key in sorted(presets.keys()):
         if key <= total:
@@ -150,7 +148,7 @@ class Zone(BaseModel):
     crossover_freq: Optional[float] = None
     is_sub: bool = False
     measurement_ids: list[int] = Field(default_factory=list)
-    positions: int = 1  # Anzahl Messpositionen
+    positions: int = 1
 
     def get_position_name(self, position: int) -> str:
         return get_position_description(position, self.positions, self.is_sub)
@@ -204,13 +202,13 @@ class ImpulseResponse(BaseModel):
 # --- EQ / Filter ---
 
 class FilterType(str, Enum):
-    PK = "PK"  # Peaking
-    LP = "LP"  # Low Pass
-    HP = "HP"  # High Pass
-    LS = "LS"  # Low Shelf
-    HS = "HS"  # High Shelf
-    NO = "NO"  # Notch
-    AP = "AP"  # All Pass
+    PK = "PK"
+    LP = "LP"
+    HP = "HP"
+    LS = "LS"
+    HS = "HS"
+    NO = "NO"
+    AP = "AP"
 
 
 class FilterSetting(BaseModel):
@@ -250,7 +248,7 @@ class EqualizerPreset(BaseModel):
     q_max: float = 128.0
     has_crossover: bool = False
     crossover_types: list[CrossoverType] = Field(default_factory=list)
-    crossover_slopes: list[int] = Field(default_factory=list)  # dB/Oct
+    crossover_slopes: list[int] = Field(default_factory=list)
     has_delay: bool = False
     delay_max_ms: float = 0.0
     has_limiter: bool = False
@@ -301,6 +299,30 @@ EQUALIZER_PRESETS: dict[str, EqualizerPreset] = {
         notes="3-In / 6-Out Speaker Management. 9 PEQ pro Kanal, "
               "31-Band GEQ, Crossover (BW/BS/LR bis 48dB/Oct), "
               "Delay bis 680ms, Limiter & Kompressor pro Ausgang.",
+    ),
+    "t.racks DS 2/4": EqualizerPreset(
+        name="t.racks DS 2/4",
+        peq_bands=5,
+        filter_types=[FilterType.PK, FilterType.LS, FilterType.HS,
+                      FilterType.LP, FilterType.HP],
+        freq_min=20.0,
+        freq_max=20000.0,
+        gain_min=-12.0,
+        gain_max=12.0,
+        q_min=0.5,
+        q_max=10.0,
+        has_crossover=True,
+        crossover_types=[CrossoverType.BUTTERWORTH],
+        crossover_slopes=[6, 12, 18, 24, 48],
+        has_delay=True,
+        delay_max_ms=7.0,
+        has_limiter=True,
+        inputs=2,
+        outputs=4,
+        sample_rate=96000,
+        notes="2-In / 4-Out Speaker Processor. 5 PEQ pro Ausgang (ISO-Terz-Frequenzraster), "
+              "Q 0.5-10, Gain +/-12 dB in 1-dB-Schritten, "
+              "HP/LP 6-48 dB/Oct, Delay 0-7 ms in 0.5-ms-Schritten, Limiter.",
     ),
     "miniDSP 2x4 HD": EqualizerPreset(
         name="miniDSP 2x4 HD",
@@ -355,13 +377,14 @@ class AlignmentResult(BaseModel):
 class DelayRecommendation(BaseModel):
     zone_name: str
     delay_ms: float = 0.0
-    delay_meters: float = 0.0  # bei 343 m/s
+    delay_meters: float = 0.0
     level_db: float = 0.0
 
 
 # --- Workflow ---
 
 class WorkflowStep(str, Enum):
+    SETUP = "setup"
     CONNECTION = "connection"
     ZONE_SETUP = "zone_setup"
     MEASUREMENT = "measurement"
@@ -369,6 +392,61 @@ class WorkflowStep(str, Enum):
     EQ = "eq"
     EXPORT = "export"
 
+
+# --- Setup Wizard ---
+
+class TopConfig(str, Enum):
+    STEREO = "Stereo L+R"
+    MONO = "Mono"
+    STEREO_DELAY = "Stereo + Delay"
+
+
+class SetupConfig(BaseModel):
+    """Konfiguration aus dem Setup-Wizard."""
+    top_config: TopConfig = TopConfig.STEREO
+    num_subs: int = 1
+    num_positions: int = 3
+    dsp_preset_name: str = "Generic"
+    target_curve_path: str = ""
+
+    def generate_zones(self) -> list[Zone]:
+        """Generiert Zonen basierend auf der Setup-Konfiguration."""
+        zones: list[Zone] = []
+        ch = 1
+        pos = self.num_positions
+        sub_pos = max(1, pos - 1)
+
+        if self.top_config in (TopConfig.STEREO, TopConfig.STEREO_DELAY):
+            zones.append(Zone(name="Top L", zone_type=ZoneType.MAIN_LEFT,
+                              output_channel=ch, positions=pos))
+            ch += 1
+            zones.append(Zone(name="Top R", zone_type=ZoneType.MAIN_RIGHT,
+                              output_channel=ch, positions=pos))
+            ch += 1
+        else:
+            zones.append(Zone(name="Top", zone_type=ZoneType.CUSTOM,
+                              output_channel=ch, positions=pos))
+            ch += 1
+
+        if self.top_config == TopConfig.STEREO_DELAY:
+            zones.append(Zone(name="Delay L", zone_type=ZoneType.DELAY_LEFT,
+                              output_channel=ch, positions=max(1, pos - 1)))
+            ch += 1
+            zones.append(Zone(name="Delay R", zone_type=ZoneType.DELAY_RIGHT,
+                              output_channel=ch, positions=max(1, pos - 1)))
+            ch += 1
+
+        for i in range(self.num_subs):
+            name = "Sub" if self.num_subs == 1 else f"Sub {i + 1}"
+            zones.append(Zone(name=name, zone_type=ZoneType.SUB,
+                              output_channel=ch, is_sub=True,
+                              crossover_freq=120.0, positions=sub_pos))
+            ch += 1
+
+        return zones
+
+
+# --- Project Config ---
 
 class ProjectConfig(BaseModel):
     """Gesamte Projekt-Konfiguration."""
@@ -379,9 +457,11 @@ class ProjectConfig(BaseModel):
     target: TargetSettings = Field(default_factory=TargetSettings)
     delays: list[DelayRecommendation] = Field(default_factory=list)
     filters: dict[str, list[FilterSetting]] = Field(default_factory=dict)
+    filter_warnings: dict[str, list[dict]] = Field(default_factory=dict)
     alignments: list[AlignmentResult] = Field(default_factory=list)
-    current_step: WorkflowStep = WorkflowStep.CONNECTION
+    current_step: WorkflowStep = WorkflowStep.SETUP
     is_pro_license: bool = False
+    setup: SetupConfig = Field(default_factory=SetupConfig)
 
 
 # --- Device Presets ---
