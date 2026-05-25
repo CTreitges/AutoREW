@@ -316,7 +316,7 @@ class REWClient:
         driver = self.get_driver_type()
         if driver == "ASIO":
             outputs = self.get_asio_outputs()
-            if channel <= len(outputs):
+            if 1 <= channel <= len(outputs):
                 self.set_asio_output(outputs[channel - 1])
         else:
             self.set_java_output_channel(channel)

@@ -87,8 +87,8 @@ def _apply_device_constraints(
         (ok_filters, not_transferable_list)
         not_transferable items: {freq, gain, q, reason, adapted}
     """
-    snap_iso = "DS 2/4" in preset.name
-    round_gain = snap_iso
+    snap_iso = preset.snap_to_iso_third_octave
+    round_gain = preset.gain_step is not None
 
     ok: list[FilterSetting] = []
     not_ok: list[dict] = []
@@ -122,8 +122,25 @@ def _apply_device_constraints(
                 f"(+/-{preset.gain_max} dB max)"
             )
 
-        if round_gain:
-            clamped.gain = float(round(clamped.gain))
+        if round_gain and preset.gain_step:
+            step = preset.gain_step
+            clamped.gain = float(round(clamped.gain / step) * step)
+
+        if clamped.filter_type not in preset.filter_types:
+            issues.append(
+                f"Typ {clamped.filter_type.value} nicht unterstuetzt, "
+                f"geaendert zu PK"
+            )
+            from autorew.models import FilterType
+            clamped.filter_type = FilterType.PK
+
+        if clamped.frequency < preset.freq_min or clamped.frequency > preset.freq_max:
+            orig_freq = clamped.frequency
+            clamped.frequency = max(preset.freq_min, min(preset.freq_max, clamped.frequency))
+            issues.append(
+                f"F {orig_freq:.0f} -> {clamped.frequency:.0f} Hz "
+                f"(Bereich {preset.freq_min:.0f}-{preset.freq_max:.0f})"
+            )
 
         orig_q = clamped.q
         clamped.q = max(preset.q_min, min(preset.q_max, clamped.q))

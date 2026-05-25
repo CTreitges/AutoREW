@@ -258,6 +258,8 @@ class EqualizerPreset(BaseModel):
     inputs: int = 0
     outputs: int = 0
     sample_rate: int = 48000
+    snap_to_iso_third_octave: bool = False
+    gain_step: Optional[float] = None
     notes: str = ""
 
 
@@ -300,9 +302,11 @@ EQUALIZER_PRESETS: dict[str, EqualizerPreset] = {
               "31-Band GEQ, Crossover (BW/BS/LR bis 48dB/Oct), "
               "Delay bis 680ms, Limiter & Kompressor pro Ausgang.",
     ),
-    "t.racks DS 2/4": EqualizerPreset(
+        "t.racks DS 2/4": EqualizerPreset(
         name="t.racks DS 2/4",
         peq_bands=5,
+        snap_to_iso_third_octave=True,
+        gain_step=1.0,
         filter_types=[FilterType.PK, FilterType.LS, FilterType.HS,
                       FilterType.LP, FilterType.HP],
         freq_min=20.0,
@@ -389,7 +393,6 @@ class WorkflowStep(str, Enum):
     ZONE_SETUP = "zone_setup"
     MEASUREMENT = "measurement"
     ANALYSIS = "analysis"
-    EQ = "eq"
     EXPORT = "export"
 
 

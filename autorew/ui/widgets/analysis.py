@@ -37,6 +37,7 @@ from autorew.models import (
     EqualizerPreset,
     EQUALIZER_PRESETS,
     FilterSetting,
+    FilterType,
     ProcessCommand,
     ProjectConfig,
     TargetSettings,

@@ -337,10 +337,12 @@ class MainWindow(QMainWindow):
 
     def _go_next(self):
         current = self._stack.currentIndex()
-        if current == 0:
+        if current == 0 and not self._demo_mode:
             setup = self._setup_widget.get_setup()
             self.config.setup = setup
             self.config.zones = setup.generate_zones()
+        if current == 2:
+            self._zone_widget.save_to_config()
         if current < len(self._pages) - 1:
             self._goto_step(current + 1)
 

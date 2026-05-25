@@ -34,11 +34,11 @@ def test_ds24_freq_snap():
 
 def test_band_limit():
     preset = EQUALIZER_PRESETS["t.racks DS 2/4"]
-    filters = [_f(float(500 * (i + 1)), -2.0, 2.0) for i in range(7)]
+    filters = [_f(f, -2.0, 2.0) for f in [500, 1000, 2000, 4000, 8000, 12500, 16000]]
     ok, nok = _apply_device_constraints(filters, preset)
     assert len(ok) == 5
     assert len(nok) == 2
-    assert "Band-Limit" in nok[-1]["reason"]
+    assert "Band-Limit" in nok[0]["reason"]
 
 
 def test_generic_wide_q():
